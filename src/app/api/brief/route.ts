@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
         body: JSON.stringify({
           query: company,
           user_id: "user_1",
-          limit: 10,
+          limit: 20,
         }),
       });
 
@@ -63,21 +63,47 @@ export async function POST(req: NextRequest) {
         const mem0Data = await mem0Res.json();
         const memories = mem0Data.results || mem0Data;
         if (Array.isArray(memories) && memories.length > 0) {
-          pastMeetings = memories
-            .filter((m: { memory?: string }) => m.memory)
-            .map((m: { memory?: string; created_at?: string; metadata?: { timestamp?: string } }) => {
-              const dateStr = m.metadata?.timestamp || m.created_at || "";
-              const date = dateStr
-                ? new Date(dateStr).toLocaleString("en-US", {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "Unknown date";
-              return { summary: m.memory || "", date };
-            });
+          // Group memories by the same meeting (within 5 minutes of each other)
+          const grouped: { date: Date; dateLabel: string; summaries: string[] }[] = [];
+
+          for (const m of memories) {
+            if (!m.memory) continue;
+            const dateStr = m.metadata?.timestamp || m.created_at || "";
+            const memDate = dateStr ? new Date(dateStr) : new Date();
+
+            // Check if this memory belongs to an existing meeting group (within 5 min)
+            let foundGroup = false;
+            for (const group of grouped) {
+              const diffMs = Math.abs(memDate.getTime() - group.date.getTime());
+              if (diffMs < 5 * 60 * 1000) {
+                // Same meeting — append to group
+                group.summaries.push(m.memory);
+                foundGroup = true;
+                break;
+              }
+            }
+
+            if (!foundGroup) {
+              const dateLabel = memDate.toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              });
+              grouped.push({ date: memDate, dateLabel, summaries: [m.memory] });
+            }
+          }
+
+          // Sort by date (oldest first)
+          grouped.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+          // Merge each group into a single meeting entry
+          pastMeetings = grouped.map((g) => ({
+            summary: g.summaries.join(". "),
+            date: g.dateLabel,
+          }));
+
           memoryContext = pastMeetings
             .map((m) => `[${m.date}] ${m.summary}`)
             .join("\n");
