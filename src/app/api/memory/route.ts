@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import MemoryClient from "mem0ai";
 
 export async function POST(req: NextRequest) {
   try {
@@ -12,12 +11,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const mem0 = new MemoryClient(process.env.MEM0_API_KEY!);
+    if (!process.env.MEM0_API_KEY) {
+      return NextResponse.json({ error: "MEM0_API_KEY not found" }, { status: 500 });
+    }
 
-    await mem0.add(
-      [{ role: "user", content: `Meeting notes for ${company}: ${notes}` }],
-      { user_id: "user_1", metadata: { company } }
-    );
+    const res = await fetch("https://api.mem0.ai/v1/memories/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Token ${process.env.MEM0_API_KEY}`,
+      },
+      body: JSON.stringify({
+        messages: [
+          { role: "user", content: `Meeting notes for ${company}: ${notes}` },
+        ],
+        user_id: "user_1",
+        metadata: { company },
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error("Mem0 add error:", res.status, errText);
+      return NextResponse.json(
+        { error: `Mem0 error: ${errText}` },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({ success: true });
   } catch (error: unknown) {

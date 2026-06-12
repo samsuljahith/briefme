@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import Exa from "exa-js";
-import MemoryClient from "mem0ai";
 
 export async function POST(req: NextRequest) {
   try {
@@ -13,7 +12,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Debug: check env vars are loaded
     if (!process.env.EXA_API_KEY) {
       return NextResponse.json({ error: "EXA_API_KEY not found in environment" }, { status: 500 });
     }
@@ -40,26 +38,40 @@ export async function POST(req: NextRequest) {
       exaContext = `Could not fetch live research for ${company}.`;
     }
 
-    // Mem0 search for past context
+    // Mem0 search via REST API
     let memoryContext = "No previous interactions recorded.";
     try {
-      const mem0 = new MemoryClient(process.env.MEM0_API_KEY);
-      const memories = await mem0.search(company, {
-        user_id: "user_1",
-        limit: 10,
+      const mem0Res = await fetch("https://api.mem0.ai/v1/memories/search/", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Token ${process.env.MEM0_API_KEY}`,
+        },
+        body: JSON.stringify({
+          query: company,
+          user_id: "user_1",
+          limit: 10,
+        }),
       });
-      if (Array.isArray(memories) && memories.length > 0) {
-        memoryContext = memories
-          .map((m: { memory?: string }) => m.memory)
-          .filter(Boolean)
-          .join("\n");
+
+      if (mem0Res.ok) {
+        const mem0Data = await mem0Res.json();
+        const memories = mem0Data.results || mem0Data;
+        if (Array.isArray(memories) && memories.length > 0) {
+          memoryContext = memories
+            .map((m: { memory?: string }) => m.memory)
+            .filter(Boolean)
+            .join("\n");
+        }
+      } else {
+        const errText = await mem0Res.text();
+        console.error("Mem0 search error:", mem0Res.status, errText);
       }
     } catch (memError: unknown) {
       console.error("Mem0 API error:", memError);
-      memoryContext = "No previous interactions recorded.";
     }
 
-    // Gemini 2.0 Flash API call
+    // Gemini 2.5 Flash API call
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`;
 
     const prompt = `You are a corporate research assistant. Based on the following research data about "${company}", return ONLY valid JSON (no markdown, no code fences) with these exact keys:
