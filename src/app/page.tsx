@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 const exampleCompanies = [
@@ -9,23 +9,64 @@ const exampleCompanies = [
   "DBS Bank",
 ];
 
+interface PitchEntry {
+  company: string;
+  timestamp: string;
+}
+
 export default function Home() {
   const [company, setCompany] = useState("");
+  const [recentPitches, setRecentPitches] = useState<PitchEntry[]>([]);
   const router = useRouter();
+
+  useEffect(() => {
+    const stored = localStorage.getItem("briefme_pitches");
+    if (stored) {
+      try {
+        setRecentPitches(JSON.parse(stored));
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (company.trim()) {
+      savePitch(company.trim());
       router.push(`/brief?company=${encodeURIComponent(company.trim())}`);
     }
   };
 
   const handleChipClick = (name: string) => {
+    savePitch(name);
     router.push(`/brief?company=${encodeURIComponent(name)}`);
   };
 
+  const savePitch = (name: string) => {
+    const stored = localStorage.getItem("briefme_pitches");
+    let pitches: PitchEntry[] = stored ? JSON.parse(stored) : [];
+    // Remove duplicate if exists
+    pitches = pitches.filter((p) => p.company.toLowerCase() !== name.toLowerCase());
+    // Add to front
+    pitches.unshift({ company: name, timestamp: new Date().toISOString() });
+    // Keep last 10
+    pitches = pitches.slice(0, 10);
+    localStorage.setItem("briefme_pitches", JSON.stringify(pitches));
+  };
+
+  const formatDate = (iso: string) => {
+    const d = new Date(iso);
+    return d.toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
   return (
-    <main className="min-h-screen flex flex-col items-center justify-center px-4">
+    <main className="min-h-screen flex flex-col items-center justify-center px-4 py-12">
       <h1 className="text-4xl font-bold text-accent mb-2">BriefMe</h1>
       <p className="text-gray-600 mb-8 text-center">
         Get an AI-powered research brief before your next meeting
@@ -59,6 +100,31 @@ export default function Home() {
           </button>
         ))}
       </div>
+
+      {/* Recent Pitches */}
+      {recentPitches.length > 0 && (
+        <div className="mt-12 w-full max-w-md">
+          <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
+            Recent Pitches
+          </h2>
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-50">
+            {recentPitches.map((pitch, i) => (
+              <button
+                key={i}
+                onClick={() => handleChipClick(pitch.company)}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+              >
+                <span className="text-gray-800 font-medium text-sm">
+                  {pitch.company}
+                </span>
+                <span className="text-gray-400 text-xs">
+                  {formatDate(pitch.timestamp)}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </main>
   );
 }

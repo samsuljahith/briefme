@@ -1,7 +1,7 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useRef, Suspense } from "react";
 
 interface BriefData {
   snapshot: string;
@@ -9,6 +9,11 @@ interface BriefData {
   pastContext: string;
   talkingPoints: string[];
   riskFlags: string[];
+}
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
 }
 
 function BriefContent() {
@@ -21,6 +26,13 @@ function BriefContent() {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Chat state
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!company) return;
@@ -47,6 +59,10 @@ function BriefContent() {
     fetchBrief();
   }, [company]);
 
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [chatMessages]);
+
   const handleSaveMemory = async () => {
     if (!notes.trim()) return;
     setSaving(true);
@@ -65,6 +81,53 @@ function BriefContent() {
       // silently fail
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSendChat = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!chatInput.trim() || chatLoading) return;
+
+    const userMessage = chatInput.trim();
+    setChatInput("");
+    setChatMessages((prev) => [...prev, { role: "user", content: userMessage }]);
+    setChatLoading(true);
+
+    try {
+      const briefContext = brief
+        ? `Snapshot: ${brief.snapshot}\nNews: ${brief.news.join("; ")}\nTalking Points: ${brief.talkingPoints.join("; ")}\nRisk Flags: ${brief.riskFlags.join("; ")}\nPast Context: ${brief.pastContext}`
+        : "";
+
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          company,
+          message: userMessage,
+          briefContext,
+          chatHistory: chatMessages,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: data.reply },
+        ]);
+      } else {
+        setChatMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: `Error: ${data.error}` },
+        ]);
+      }
+    } catch {
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Failed to get a response. Try again." },
+      ]);
+    } finally {
+      setChatLoading(false);
     }
   };
 
@@ -96,7 +159,7 @@ function BriefContent() {
   }
 
   return (
-    <main className="min-h-screen px-4 py-8 max-w-4xl mx-auto">
+    <main className="min-h-screen px-4 py-8 max-w-4xl mx-auto pb-24">
       <h1 className="text-3xl font-bold text-accent mb-6">{company}</h1>
 
       {brief && (
@@ -184,12 +247,91 @@ function BriefContent() {
             {saving ? "Saving..." : "Save to Memory"}
           </button>
           {saved && (
-            <span className="text-green-600 text-sm">
-              ✓ Saved to memory
-            </span>
+            <span className="text-green-600 text-sm">✓ Saved to memory</span>
           )}
         </div>
       </div>
+
+      {/* Chat Toggle Button */}
+      <button
+        onClick={() => setChatOpen(!chatOpen)}
+        className="fixed bottom-6 right-6 w-14 h-14 bg-accent text-white rounded-full shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center text-xl z-50"
+        aria-label="Toggle chat assistant"
+      >
+        {chatOpen ? "✕" : "💬"}
+      </button>
+
+      {/* Chat Panel */}
+      {chatOpen && (
+        <div className="fixed bottom-24 right-6 w-96 max-w-[calc(100vw-2rem)] h-[28rem] bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col z-50">
+          {/* Chat Header */}
+          <div className="px-4 py-3 border-b border-gray-100 bg-accent rounded-t-xl">
+            <h3 className="text-white font-semibold text-sm">
+              Ask about {company}
+            </h3>
+            <p className="text-blue-100 text-xs">
+              Get help with your pitch — ask anything
+            </p>
+          </div>
+
+          {/* Chat Messages */}
+          <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
+            {chatMessages.length === 0 && (
+              <p className="text-gray-400 text-sm text-center mt-8">
+                Ask me anything about {company} to help with your pitch.
+              </p>
+            )}
+            {chatMessages.map((msg, i) => (
+              <div
+                key={i}
+                className={`flex ${
+                  msg.role === "user" ? "justify-end" : "justify-start"
+                }`}
+              >
+                <div
+                  className={`max-w-[80%] px-3 py-2 rounded-lg text-sm ${
+                    msg.role === "user"
+                      ? "bg-accent text-white"
+                      : "bg-gray-100 text-gray-800"
+                  }`}
+                >
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            {chatLoading && (
+              <div className="flex justify-start">
+                <div className="bg-gray-100 px-3 py-2 rounded-lg text-sm text-gray-500">
+                  Thinking...
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          {/* Chat Input */}
+          <form
+            onSubmit={handleSendChat}
+            className="px-3 py-3 border-t border-gray-100 flex gap-2"
+          >
+            <input
+              type="text"
+              value={chatInput}
+              onChange={(e) => setChatInput(e.target.value)}
+              placeholder="Ask a question..."
+              className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
+              aria-label="Chat message"
+            />
+            <button
+              type="submit"
+              disabled={chatLoading || !chatInput.trim()}
+              className="px-3 py-2 bg-accent text-white rounded-lg text-sm hover:bg-blue-700 transition-colors disabled:opacity-50"
+            >
+              Send
+            </button>
+          </form>
+        </div>
+      )}
     </main>
   );
 }
