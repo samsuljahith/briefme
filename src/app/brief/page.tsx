@@ -267,10 +267,10 @@ function BriefContent() {
           {/* Chat Header */}
           <div className="px-4 py-3 border-b border-gray-100 bg-accent rounded-t-xl">
             <h3 className="text-white font-semibold text-sm">
-              Ask about {company}
+              🔍 Sales Research Agent
             </h3>
             <p className="text-blue-100 text-xs">
-              Get help with your pitch — ask anything
+              Live web search powered — ask anything about {company}
             </p>
           </div>
 
@@ -278,7 +278,7 @@ function BriefContent() {
           <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
             {chatMessages.length === 0 && (
               <p className="text-gray-400 text-sm text-center mt-8">
-                Ask me anything about {company} to help with your pitch.
+                I search the web in real-time to answer your questions about {company}. Try asking about competitors, financials, or recent deals.
               </p>
             )}
             {chatMessages.map((msg, i) => (
@@ -302,7 +302,7 @@ function BriefContent() {
             {chatLoading && (
               <div className="flex justify-start">
                 <div className="bg-gray-100 px-3 py-2 rounded-lg text-sm text-gray-500">
-                  Thinking...
+                  🔍 Searching the web...
                 </div>
               </div>
             )}
