@@ -38,8 +38,13 @@ export async function POST(req: NextRequest) {
       exaContext = `Could not fetch live research for ${company}.`;
     }
 
-    // Mem0 search via REST API
+    // Mem0 search via REST API — get individual meeting entries
     let memoryContext = "No previous interactions recorded.";
+    interface MeetingEntry {
+      summary: string;
+      date: string;
+    }
+    let pastMeetings: MeetingEntry[] = [];
     try {
       const mem0Res = await fetch("https://api.mem0.ai/v1/memories/search/", {
         method: "POST",
@@ -58,9 +63,23 @@ export async function POST(req: NextRequest) {
         const mem0Data = await mem0Res.json();
         const memories = mem0Data.results || mem0Data;
         if (Array.isArray(memories) && memories.length > 0) {
-          memoryContext = memories
-            .map((m: { memory?: string }) => m.memory)
-            .filter(Boolean)
+          pastMeetings = memories
+            .filter((m: { memory?: string }) => m.memory)
+            .map((m: { memory?: string; created_at?: string; metadata?: { timestamp?: string } }) => {
+              const dateStr = m.metadata?.timestamp || m.created_at || "";
+              const date = dateStr
+                ? new Date(dateStr).toLocaleString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "Unknown date";
+              return { summary: m.memory || "", date };
+            });
+          memoryContext = pastMeetings
+            .map((m) => `[${m.date}] ${m.summary}`)
             .join("\n");
         }
       } else {
@@ -127,6 +146,9 @@ Return ONLY the JSON object, nothing else.`;
       .trim();
 
     const briefData = JSON.parse(cleanedText);
+
+    // Attach the raw past meetings array for the frontend
+    briefData.pastMeetings = pastMeetings;
 
     return NextResponse.json(briefData);
   } catch (error: unknown) {

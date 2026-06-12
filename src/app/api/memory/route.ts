@@ -15,6 +15,15 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "MEM0_API_KEY not found" }, { status: 500 });
     }
 
+    const timestamp = new Date().toISOString();
+    const dateLabel = new Date().toLocaleString("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
     const res = await fetch("https://api.mem0.ai/v1/memories/", {
       method: "POST",
       headers: {
@@ -23,10 +32,13 @@ export async function POST(req: NextRequest) {
       },
       body: JSON.stringify({
         messages: [
-          { role: "user", content: `Meeting notes for ${company}: ${notes}` },
+          {
+            role: "user",
+            content: `[Meeting on ${dateLabel}] Notes for ${company}: ${notes}`,
+          },
         ],
         user_id: "user_1",
-        metadata: { company },
+        metadata: { company, timestamp, type: "meeting_notes" },
       }),
     });
 
@@ -39,7 +51,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ success: true });
+    // Also save to localStorage-friendly response
+    return NextResponse.json({ success: true, timestamp, dateLabel });
   } catch (error: unknown) {
     console.error("Memory save error:", error);
     return NextResponse.json(

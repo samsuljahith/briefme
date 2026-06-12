@@ -9,6 +9,7 @@ interface BriefData {
   pastContext: string;
   talkingPoints: string[];
   riskFlags: string[];
+  pastMeetings: { summary: string; date: string }[];
 }
 
 interface ChatMessage {
@@ -73,8 +74,26 @@ function BriefContent() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ company, notes }),
       });
+      const data = await res.json();
       if (res.ok) {
         setSaved(true);
+        // Add the new meeting to the pastMeetings list immediately
+        if (brief) {
+          const newMeeting = {
+            summary: `Meeting notes for ${company}: ${notes}`,
+            date: data.dateLabel || new Date().toLocaleString("en-US", {
+              month: "short",
+              day: "numeric",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          };
+          setBrief({
+            ...brief,
+            pastMeetings: [...(brief.pastMeetings || []), newMeeting],
+          });
+        }
         setNotes("");
       }
     } catch {
@@ -191,9 +210,25 @@ function BriefContent() {
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
               Past Context
             </h2>
-            <p className="text-gray-700 text-sm">
-              {brief.pastContext || "No previous interactions recorded."}
-            </p>
+            {brief.pastMeetings && brief.pastMeetings.length > 0 ? (
+              <div className="space-y-3">
+                {brief.pastMeetings.map((meeting, i) => (
+                  <div
+                    key={i}
+                    className="border-l-2 border-accent pl-3 py-1"
+                  >
+                    <p className="text-xs text-gray-400 font-medium mb-0.5">
+                      Meeting {i + 1} — {meeting.date}
+                    </p>
+                    <p className="text-gray-700 text-sm">{meeting.summary}</p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-700 text-sm">
+                {brief.pastContext || "No previous interactions recorded."}
+              </p>
+            )}
           </div>
 
           {/* Talking Points */}
