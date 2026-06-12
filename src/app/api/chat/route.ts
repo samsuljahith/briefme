@@ -29,8 +29,8 @@ export async function POST(req: NextRequest) {
         text: { maxCharacters: 600 },
       });
       liveSearchResults = exaResults.results
-        .map((r: { title?: string; text?: string; url?: string }) =>
-          `[${r.title}](${r.url})\n${r.text}`
+        .map((r) =>
+          `[${r.title || ""}](${r.url || ""})\n${r.text || ""}`
         )
         .join("\n\n");
     } catch (exaError: unknown) {

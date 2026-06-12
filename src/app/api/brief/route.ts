@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
         text: { maxCharacters: 800 },
       });
       exaContext = exaResults.results
-        .map((r: { title?: string; text?: string }) => `${r.title}: ${r.text}`)
+        .map((r) => `${r.title || ""}: ${r.text || ""}`)
         .join("\n\n");
     } catch (exaError: unknown) {
       console.error("Exa API error:", exaError);
